@@ -15,7 +15,11 @@ class PipelineStage(str, Enum):
 
     PROMPTING = "prompting"
     MEDIA_GENERATION = "media_generation"
+    AUDIO_SYNTHESIS = "audio_synthesis"
+    KEN_BURNS_RENDER = "ken_burns_render"
+    VIDEO_ASSEMBLY = "video_assembly"
     EDITING = "editing"
+    FINAL_DELIVERY = "final_delivery"
 
 
 @dataclass(slots=True)
