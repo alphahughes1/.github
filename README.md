@@ -110,3 +110,51 @@ The frontend now includes two workflows:
 - **Render Film** – submit story, voice, image asset mappings, and optional supplemental clips to create narrated Ken Burns videos and a stitched long-form film. Render results list the final film path and each per-shot video output.
 
 Use CMD/CTRL + Enter inside the story textarea as a shortcut to trigger plan generation.
+
+## Running everything from a Samsung Galaxy Tab S7 (or other Android tablet)
+
+If you only have access to a tablet, you can still run the project locally by using an Android terminal environment such as
+[Termux](https://termux.dev/en/). The high-level flow looks like this:
+
+1. **Install Termux** from F-Droid (the Play Store build is outdated). Open the app and update the package index:
+   ```bash
+   pkg update && pkg upgrade
+   ```
+2. **Install required tooling** inside Termux:
+   ```bash
+   pkg install git python nodejs-lts ffmpeg espeak
+   pip install --upgrade pip
+   ```
+   > `ffmpeg` powers video assembly and `espeak` enables offline text-to-speech for `pyttsx3`.
+3. **Fetch the repo** (either clone from GitHub or download the ZIP on another device and copy it over):
+   ```bash
+   git clone https://github.com/<your-account>/<repo-name>.git
+   cd <repo-name>/.github
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+4. **Start the backend** using Uvicorn within Termux:
+   ```bash
+   uvicorn backend.app:app --host 0.0.0.0 --port 8000
+   ```
+   Leave this process running. Termux will keep it alive as long as the screen stays on; consider enabling “Wake Lock” in the
+   Termux notification to prevent Android from suspending the session.
+5. **Serve the frontend** from a second Termux session (swipe in from the left edge → “New session”):
+   ```bash
+   cd <repo-name>/.github
+   source .venv/bin/activate
+   python -m http.server --directory frontend 5173
+   ```
+6. **Open the frontend in the tablet browser** at `http://127.0.0.1:5173`. Because both servers run on the same device, the
+   default configuration just works. If you see cross-origin errors, confirm the backend is still running and reachable at
+   `http://127.0.0.1:8000`.
+
+### Tips for a smoother mobile experience
+
+- **Use an external keyboard** (Bluetooth or USB) if possible—copying scripts and editing JSON payloads is much easier.
+- **Keep your tablet powered**; long renders can be CPU-intensive and may drain the battery quickly.
+- **Offload heavy rendering** by pairing the frontend with a remote backend. Deploy the backend on a desktop, server, or cloud
+  instance, then edit `frontend/app.js` to point `API_BASE_URL` at the remote address.
+- **Monitor storage usage** under `media/`; long Ken Burns films and per-shot clips can take several gigabytes. Periodically
+  clean up old renders to free space.
