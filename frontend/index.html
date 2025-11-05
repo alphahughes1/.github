@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Short Film Script Generator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Short Film Script Generator</h1>
+      <p>
+        Paste your story concept below to generate a structured plan of scenes and
+        shots for a YouTube-ready short film.
+      </p>
+    </header>
+
+    <main>
+      <section class="editor-panel">
+        <textarea
+          id="story-input"
+          placeholder="Write a short story or premise..."
+          rows="12"
+        ></textarea>
+        <button id="generate-btn" class="primary-btn">Generate Script</button>
+        <p id="status-message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="results-panel" id="results" hidden>
+        <h2>Scene Plan</h2>
+        <div id="scene-list"></div>
+      </section>
+    </main>
+
+    <footer>
+      <small>
+        Built with FastAPI &amp; vanilla JavaScript. Run the backend and open this page
+        via a static file server to try it out locally.
+      </small>
+    </footer>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
