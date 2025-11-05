@@ -46,6 +46,13 @@
             value="ken_burns_feature.mp4"
           />
 
+          <label for="image-style" class="input-label">Image Style (optional)</label>
+          <input
+            id="image-style"
+            type="text"
+            placeholder="cinematic realism, futuristic neon, warm and nostalgic..."
+          />
+
           <label for="image-assets-input" class="input-label">Generated Image Paths</label>
           <textarea
             id="image-assets-input"
@@ -55,6 +62,11 @@
           <p class="help-text">
             Provide one mapping per line using <code>asset_id=absolute/path/to/image</code>.
           </p>
+
+          <label class="checkbox">
+            <input type="checkbox" id="auto-generate-images" />
+            Auto-generate cinematic placeholder images for any missing artwork
+          </label>
 
           <label for="clip-input" class="input-label">Supplemental Video Clips (optional)</label>
           <textarea
@@ -77,6 +89,10 @@
           <h3>Render Outputs</h3>
           <p class="film-path"></p>
           <ul class="shot-output-list"></ul>
+          <div class="generated-images" hidden>
+            <h4>Generated Placeholder Images</h4>
+            <ul></ul>
+          </div>
         </div>
       </section>
     </main>

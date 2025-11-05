@@ -69,11 +69,14 @@ class ShotPlan:
     narration_text: str
     assets: List[AssetPlan] = field(default_factory=list)
     notes: Optional[str] = None
+    metadata: Dict[str, str] = field(default_factory=dict)
     tts_chunks: List[TTSChunk] = field(default_factory=list)
     ken_burns_segments: List[KenBurnsSegment] = field(default_factory=list)
     inserted_clips: List[VideoClipReference] = field(default_factory=list)
     audio_track: Optional[AssetPlan] = None
     assembled_video: Optional[AssetPlan] = None
+    start_time: float = 0.0
+    end_time: float = 0.0
 
     def add_asset(self, asset: AssetPlan) -> None:
         """Attach an asset to the shot."""
@@ -91,6 +94,11 @@ class ShotPlan:
         """Schedule a user-supplied clip to blend into the shot."""
         self.inserted_clips.append(clip)
 
+    def set_timeline(self, start: float, end: float) -> None:
+        """Record when the shot starts and ends within its scene."""
+        self.start_time = start
+        self.end_time = end
+
 
 @dataclass(slots=True)
 class ScenePlan:
@@ -102,7 +110,14 @@ class ScenePlan:
     background_audio: Optional[AssetPlan] = None
     metadata: Dict[str, str] = field(default_factory=dict)
     total_duration: Optional[float] = None
+    start_time: float = 0.0
+    end_time: float = 0.0
 
     def add_shot(self, shot: ShotPlan) -> None:
         """Append a new shot to the scene."""
         self.shots.append(shot)
+
+    def set_timeline(self, start: float, end: float) -> None:
+        """Record when the scene starts and ends within the full film."""
+        self.start_time = start
+        self.end_time = end

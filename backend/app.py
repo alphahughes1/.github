@@ -97,12 +97,15 @@ class ShotPlanResponse(BaseModel):
     visual_prompt: str
     narration_text: str
     notes: str | None = None
+    metadata: Dict[str, str] = Field(default_factory=dict)
     assets: List[AssetPlanResponse] = Field(default_factory=list)
     tts_chunks: List[TTSChunkResponse] = Field(default_factory=list)
     ken_burns_segments: List[KenBurnsSegmentResponse] = Field(default_factory=list)
     inserted_clips: List[VideoClipReferenceResponse] = Field(default_factory=list)
     audio_track: AssetPlanResponse | None = None
     assembled_video: AssetPlanResponse | None = None
+    start_time: float = 0.0
+    end_time: float = 0.0
 
     @classmethod
     def from_model(cls, model: ShotPlan) -> "ShotPlanResponse":
@@ -112,6 +115,7 @@ class ShotPlanResponse(BaseModel):
             visual_prompt=model.visual_prompt,
             narration_text=model.narration_text,
             notes=model.notes,
+            metadata=model.metadata,
             assets=[AssetPlanResponse.from_model(asset) for asset in model.assets],
             tts_chunks=[TTSChunkResponse.from_model(chunk) for chunk in model.tts_chunks],
             ken_burns_segments=[
@@ -132,6 +136,8 @@ class ShotPlanResponse(BaseModel):
                 if model.assembled_video
                 else None
             ),
+            start_time=model.start_time,
+            end_time=model.end_time,
         )
 
 
@@ -142,6 +148,8 @@ class ScenePlanResponse(BaseModel):
     shots: List[ShotPlanResponse] = Field(default_factory=list)
     background_audio: AssetPlanResponse | None = None
     total_duration: float | None = None
+    start_time: float = 0.0
+    end_time: float = 0.0
 
     @classmethod
     def from_model(cls, model: ScenePlan) -> "ScenePlanResponse":
@@ -157,6 +165,8 @@ class ScenePlanResponse(BaseModel):
             shots=[ShotPlanResponse.from_model(shot) for shot in model.shots],
             background_audio=background_audio,
             total_duration=model.total_duration,
+            start_time=model.start_time,
+            end_time=model.end_time,
         )
 
 
@@ -183,16 +193,19 @@ class SupplementalClipInput(BaseModel):
 
 class RenderFilmRequest(BaseModel):
     story_text: str
-    image_assets: List[ImageAssetInput]
+    image_assets: List[ImageAssetInput] = Field(default_factory=list)
     supplemental_clips: List[SupplementalClipInput] = Field(default_factory=list)
     voice: str | None = None
     film_name: str | None = None
+    auto_generate_images: bool = False
+    image_style: str | None = None
 
 
 class RenderFilmResponse(BaseModel):
     film_path: str
     shots: Dict[str, str]
     plan: GenerateScriptResponse
+    generated_images: Dict[str, str] = Field(default_factory=dict)
 
 
 def _group_supplemental_clips(
@@ -238,9 +251,6 @@ def render_film(payload: RenderFilmRequest) -> RenderFilmResponse:
     story_text = payload.story_text.strip()
     if not story_text:
         raise HTTPException(status_code=400, detail="story_text must not be empty")
-    if not payload.image_assets:
-        raise HTTPException(status_code=400, detail="image_assets must not be empty")
-
     image_assets: Dict[str, str] = {}
     for asset in payload.image_assets:
         asset_path = Path(asset.path)
@@ -251,16 +261,26 @@ def render_film(payload: RenderFilmRequest) -> RenderFilmResponse:
             )
         image_assets[asset.asset_identifier] = str(asset_path)
 
+    if not image_assets and not payload.auto_generate_images:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide image_assets or enable auto_generate_images",
+        )
+
     clip_inputs = _group_supplemental_clips(payload.supplemental_clips)
 
     original_voice = controller.default_voice
+    original_style = controller.prompt_generator.default_style
     if payload.voice:
         controller.default_voice = payload.voice
+    if payload.image_style:
+        controller.prompt_generator.default_style = payload.image_style
 
     try:
         scenes = controller.plan_and_schedule(story_text, inserted_clips=clip_inputs)
     finally:
         controller.default_voice = original_voice
+        controller.prompt_generator.default_style = original_style
 
     plan_response = GenerateScriptResponse(
         scenes=[ScenePlanResponse.from_model(scene) for scene in scenes]
@@ -278,6 +298,8 @@ def render_film(payload: RenderFilmRequest) -> RenderFilmResponse:
             image_assets=image_assets,
             supplemental_clips=supplemental_map,
             film_name=payload.film_name or "ken_burns_feature.mp4",
+            auto_generate_images=payload.auto_generate_images,
+            image_style=payload.image_style,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -291,8 +313,14 @@ def render_film(payload: RenderFilmRequest) -> RenderFilmResponse:
         for shot_name, path in film_outputs["shots"].items()
     }
 
+    generated_images = {
+        identifier: str(path)
+        for identifier, path in film_outputs.get("images", {}).items()
+    }
+
     return RenderFilmResponse(
         film_path=str(film_path),
         shots=shot_paths,
         plan=plan_response,
+        generated_images=generated_images,
     )

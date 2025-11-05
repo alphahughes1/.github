@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Mapping, MutableMapping, Sequence
+from typing import Dict, Mapping, MutableMapping, Sequence
 
 from moviepy.editor import (
     AudioFileClip,
@@ -16,6 +16,7 @@ from moviepy.video.fx import all as vfx
 from pydub import AudioSegment
 import pyttsx3
 
+from .imagery import PlaceholderImageFactory
 from .models import KenBurnsSegment, ScenePlan, ShotPlan, TTSChunk, VideoClipReference
 
 
@@ -118,6 +119,7 @@ class KenBurnsRenderer:
 
         final_clip = concatenate_videoclips(clips, method="compose")
 
+        narration_audio: AudioFileClip | None = None
         if shot.audio_track and shot.audio_track.source_uri:
             narration_audio = AudioFileClip(shot.audio_track.source_uri)
             final_clip = final_clip.set_audio(
@@ -138,6 +140,8 @@ class KenBurnsRenderer:
             )
         finally:
             final_clip.close()
+            if narration_audio is not None:
+                narration_audio.close()
             for clip in clips:
                 if hasattr(clip, "close"):
                     clip.close()
@@ -216,23 +220,43 @@ class FilmAssembler:
 class KenBurnsFilmBuilder:
     """High-level coordinator that renders narration, Ken Burns clips, and the final film."""
 
-    def __init__(self, media_root: Path, logger: logging.Logger | None = None) -> None:
+    def __init__(
+        self,
+        media_root: Path,
+        logger: logging.Logger | None = None,
+        placeholder_factory: PlaceholderImageFactory | None = None,
+    ) -> None:
         self.media_root = media_root
         self.media_root.mkdir(parents=True, exist_ok=True)
         self.logger = logger or logging.getLogger(self.__class__.__name__)
         self.tts = TTSAudioAssembler(self.logger)
         self.renderer = KenBurnsRenderer(logger=self.logger)
         self.assembler = FilmAssembler(self.logger)
+        self.image_factory = placeholder_factory or PlaceholderImageFactory(
+            self.media_root / "images"
+        )
 
     def build(
         self,
         scenes: Sequence[ScenePlan],
-        image_assets: Mapping[str, str],
+        image_assets: Mapping[str, str] | None = None,
         supplemental_clips: Mapping[str, Sequence[VideoClipReference]] | None = None,
         film_name: str = "ken_burns_feature.mp4",
+        auto_generate_images: bool = False,
+        image_style: str | None = None,
     ) -> MutableMapping[str, Path]:
         supplemental_clips = supplemental_clips or {}
+        image_assets_map: Dict[str, str] = dict(image_assets or {})
+        generated_images: Dict[str, Path] = {}
         shot_video_map: dict[str, Path] = {}
+
+        self._ensure_images(
+            scenes,
+            image_assets_map,
+            auto_generate=auto_generate_images,
+            style_hint=image_style,
+            generated_images=generated_images,
+        )
 
         for scene in scenes:
             for shot in scene.shots:
@@ -247,7 +271,7 @@ class KenBurnsFilmBuilder:
                 self.logger.debug("Rendering Ken Burns clip for %s", shot.name)
                 video_path = self.renderer.render_shot(
                     shot,
-                    image_assets=image_assets,
+                    image_assets=image_assets_map,
                     output_dir=shot_dir / "video",
                     supplemental_clips=clip_references,
                 )
@@ -256,4 +280,40 @@ class KenBurnsFilmBuilder:
         film_path = self.media_root / film_name
         self.logger.debug("Assembling final film %s", film_path)
         self.assembler.assemble(scenes, film_path, shot_video_map)
-        return {"film": film_path, "shots": shot_video_map}
+        return {"film": film_path, "shots": shot_video_map, "images": generated_images}
+
+    def _ensure_images(
+        self,
+        scenes: Sequence[ScenePlan],
+        image_assets: Dict[str, str],
+        *,
+        auto_generate: bool,
+        style_hint: str | None,
+        generated_images: Dict[str, Path],
+    ) -> None:
+        missing: list[str] = []
+        for scene in scenes:
+            for shot in scene.shots:
+                for asset in shot.assets:
+                    if asset.asset_type != "image_prompt":
+                        continue
+                    provided_path = image_assets.get(asset.identifier)
+                    if provided_path:
+                        asset.source_uri = provided_path
+                        continue
+                    if not auto_generate:
+                        missing.append(asset.identifier)
+                        continue
+                    self.logger.debug(
+                        "Auto-generating placeholder image for %s", asset.identifier
+                    )
+                    generated_path = self.image_factory.create(
+                        asset, style_hint=style_hint
+                    )
+                    image_assets[asset.identifier] = str(generated_path)
+                    generated_images[asset.identifier] = generated_path
+
+        if missing:
+            raise FileNotFoundError(
+                "Missing generated images for: " + ", ".join(sorted(set(missing)))
+            )

@@ -1,5 +1,6 @@
 """Pipeline package exposing orchestration helpers for story-driven media workflows."""
 
+from .imagery import PlaceholderImageFactory
 from .main import StoryPipelineController
 from .models import (
     AssetPlan,
@@ -10,6 +11,7 @@ from .models import (
     VideoClipReference,
 )
 from .production import KenBurnsFilmBuilder
+from .prompting import PromptDetails, PromptGenerator
 from .scheduler import PipelineScheduler, PipelineStage, StageTask
 
 __all__ = [
@@ -24,4 +26,7 @@ __all__ = [
     "StageTask",
     "StoryPipelineController",
     "KenBurnsFilmBuilder",
+    "PromptGenerator",
+    "PromptDetails",
+    "PlaceholderImageFactory",
 ]

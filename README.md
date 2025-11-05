@@ -9,6 +9,10 @@ This project combines a Python backend and a lightweight frontend to turn raw st
 - `frontend/` – static web experience that interacts with the backend and renders scene plans.
 - `requirements.txt` – Python dependencies for running the backend.
 
+The pipeline reads raw narration, splits it into scenes and shots, generates cinematic image prompts, and schedules every
+downstream stage (TTS, Ken Burns motion, editing, delivery). You can feed it custom assets or rely on the built-in placeholder
+generator to keep renders moving while bespoke artwork is still in progress.
+
 ## Getting Started
 
 ### 1. Create a virtual environment
@@ -45,6 +49,8 @@ The render endpoint payload uses the following structure:
   "story_text": "...",
   "voice": "com.apple.speech.synthesis.voice.samantha",   // optional
   "film_name": "ken_burns_feature.mp4",                    // optional
+  "image_style": "cinematic realism",                      // optional prompt styling hint
+  "auto_generate_images": true,                             // optional placeholder fallback
   "image_assets": [
     { "asset_identifier": "Shot 1.1-visual", "path": "/abs/path/shot_1_1.png" }
   ],
@@ -74,8 +80,8 @@ Navigate to `http://127.0.0.1:5173` in your browser and connect to the backend a
 
 1. Generate still imagery for each `image_prompt` asset (e.g., using a diffusion model) and note the file paths.
 2. Add optional short-form videos you want stitched into specific shots.
-3. Paste the story, image asset mappings, and supplemental clip metadata into the frontend or call `POST /api/films/render` manually.
-4. The backend will synthesise narration, pan/zoom across each still using the Ken Burns effect, blend in any provided clips, and assemble a seamless 20–30 minute feature-length MP4 with narration.
+3. Paste the story, image asset mappings, and supplemental clip metadata into the frontend or call `POST /api/films/render` manually. Toggle **Auto-generate cinematic placeholder images** if you want the backend to fabricate artwork for anything you did not supply yet.
+4. The backend will synthesise narration, pan/zoom across each still using the Ken Burns effect, blend in any provided clips, and assemble a seamless 20–30 minute feature-length MP4 with narration. Every shot and narration chunk includes explicit start/end timestamps so you can line the film up with other editors or VFX passes.
 
 Image mappings must follow `asset_id=/abs/path/to/image.png` (one per line). Supplemental clips use `Shot Name=/abs/path.mp4,duration_seconds,insertion_offset,optional description`.
 
@@ -107,7 +113,7 @@ PY
 The frontend now includes two workflows:
 
 - **Generate Plan** – produce a detailed scene plan with narration chunks, Ken Burns segments, and external asset requirements.
-- **Render Film** – submit story, voice, image asset mappings, and optional supplemental clips to create narrated Ken Burns videos and a stitched long-form film. Render results list the final film path and each per-shot video output.
+- **Render Film** – submit story, voice, image asset mappings, optional supplemental clips, and optionally enable auto-generated placeholder imagery to create narrated Ken Burns videos and a stitched long-form film. Render results list the final film path, each per-shot video output, and any placeholder frames built on your behalf.
 
 Use CMD/CTRL + Enter inside the story textarea as a shortcut to trigger plan generation.
 
@@ -156,5 +162,5 @@ If you only have access to a tablet, you can still run the project locally by us
 - **Keep your tablet powered**; long renders can be CPU-intensive and may drain the battery quickly.
 - **Offload heavy rendering** by pairing the frontend with a remote backend. Deploy the backend on a desktop, server, or cloud
   instance, then edit `frontend/app.js` to point `API_BASE_URL` at the remote address.
-- **Monitor storage usage** under `media/`; long Ken Burns films and per-shot clips can take several gigabytes. Periodically
-  clean up old renders to free space.
+- **Monitor storage usage** under `media/`; long Ken Burns films, generated placeholder artwork, and per-shot clips can take
+  several gigabytes. Periodically clean up old renders to free space.

@@ -13,6 +13,9 @@ const formElements = {
   filmName: document.getElementById("film-name"),
   imageAssets: document.getElementById("image-assets-input"),
   clipInput: document.getElementById("clip-input"),
+  imageStyle: document.getElementById("image-style"),
+  autoGenerateImages: document.getElementById("auto-generate-images"),
+  generatedImages: document.querySelector("#film-output .generated-images"),
 };
 
 const API_BASE = (() => {
@@ -95,8 +98,15 @@ function renderScenes(scenes) {
     const summary = document.createElement("p");
     summary.textContent = scene.summary;
 
+    const sceneTiming = document.createElement("p");
+    sceneTiming.className = "scene-timing";
+    sceneTiming.textContent = `Timeline: ${formatSeconds(scene.start_time)} → ${formatSeconds(
+      scene.end_time
+    )} • Shots: ${(scene.shots || []).length}`;
+
     header.appendChild(title);
     header.appendChild(summary);
+    header.appendChild(sceneTiming);
 
     const shotList = document.createElement("ul");
     shotList.className = "shot-list";
@@ -114,9 +124,23 @@ function renderScenes(scenes) {
       const narration = document.createElement("p");
       narration.textContent = `Narration: ${shot.narration_text}`;
 
+      const timeline = document.createElement("p");
+      timeline.className = "shot-timeline";
+      timeline.textContent = `Timeline: ${formatSeconds(shot.start_time)} → ${formatSeconds(
+        shot.end_time
+      )}`;
+
       shotItem.appendChild(shotTitle);
       shotItem.appendChild(prompt);
       shotItem.appendChild(narration);
+      shotItem.appendChild(timeline);
+
+      if (shot.metadata && shot.metadata.keywords) {
+        const keywords = document.createElement("p");
+        keywords.className = "shot-keywords";
+        keywords.textContent = `Keywords: ${shot.metadata.keywords}`;
+        shotItem.appendChild(keywords);
+      }
 
       if (Array.isArray(shot.assets) && shot.assets.length > 0) {
         const assetHeader = document.createElement("p");
@@ -241,6 +265,13 @@ function formatTiming(start, end, duration) {
   return "";
 }
 
+function formatSeconds(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "0.0s";
+  }
+  return `${value.toFixed(1)}s`;
+}
+
 function parseImageAssets(text) {
   const entries = [];
   text
@@ -302,8 +333,10 @@ async function handleRender() {
   let supplementalClips;
   try {
     imageAssets = parseImageAssets(formElements.imageAssets.value);
-    if (!imageAssets.length) {
-      throw new Error("Please provide at least one image asset mapping.");
+    if (!imageAssets.length && !formElements.autoGenerateImages.checked) {
+      throw new Error(
+        "Provide at least one image asset mapping or enable auto-generation."
+      );
     }
     supplementalClips = parseSupplementalClips(formElements.clipInput.value);
   } catch (error) {
@@ -317,6 +350,8 @@ async function handleRender() {
     film_name: formElements.filmName.value.trim() || undefined,
     image_assets: imageAssets,
     supplemental_clips: supplementalClips,
+    auto_generate_images: formElements.autoGenerateImages.checked,
+    image_style: formElements.imageStyle.value.trim() || undefined,
   };
 
   formElements.filmStatus.textContent = "Rendering film...";
@@ -337,18 +372,23 @@ async function handleRender() {
 
     const data = await response.json();
     renderScenes(data.plan.scenes);
-    renderFilmOutputs(data.film_path, data.shots);
+    renderFilmOutputs(data.film_path, data.shots, data.generated_images);
     formElements.filmStatus.textContent = "Film rendered successfully.";
   } catch (error) {
     console.error(error);
     formElements.filmStatus.textContent = error.message || "Unexpected render error.";
     formElements.filmOutput.hidden = true;
+    if (formElements.generatedImages) {
+      const list = formElements.generatedImages.querySelector("ul");
+      if (list) list.innerHTML = "";
+      formElements.generatedImages.hidden = true;
+    }
   } finally {
     setButtonLoading(formElements.renderButton, false, "Render Film");
   }
 }
 
-function renderFilmOutputs(filmPath, shotPaths) {
+function renderFilmOutputs(filmPath, shotPaths, generatedImages) {
   if (!filmPath) {
     formElements.filmOutput.hidden = true;
     return;
@@ -360,11 +400,37 @@ function renderFilmOutputs(filmPath, shotPaths) {
     item.textContent = `${shotName}: ${path}`;
     formElements.shotOutputList.appendChild(item);
   });
+  if (generatedImages && Object.keys(generatedImages).length > 0) {
+    const list = formElements.generatedImages.querySelector("ul");
+    list.innerHTML = "";
+    Object.entries(generatedImages).forEach(([identifier, path]) => {
+      const item = document.createElement("li");
+      item.textContent = `${identifier}: ${path}`;
+      list.appendChild(item);
+    });
+    formElements.generatedImages.hidden = false;
+  } else if (formElements.generatedImages) {
+    const list = formElements.generatedImages.querySelector("ul");
+    if (list) list.innerHTML = "";
+    formElements.generatedImages.hidden = true;
+  }
   formElements.filmOutput.hidden = false;
 }
 
 formElements.generateButton.addEventListener("click", handleGenerate);
 formElements.renderButton.addEventListener("click", handleRender);
+
+formElements.autoGenerateImages.addEventListener("change", () => {
+  const disabled = formElements.autoGenerateImages.checked;
+  formElements.imageAssets.disabled = disabled;
+  if (disabled) {
+    formElements.imageAssets.classList.add("disabled");
+  } else {
+    formElements.imageAssets.classList.remove("disabled");
+  }
+});
+
+formElements.autoGenerateImages.dispatchEvent(new Event("change"));
 
 formElements.input.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "enter") {

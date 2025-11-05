@@ -14,6 +14,7 @@ from .models import (
     TTSChunk,
     VideoClipReference,
 )
+from .prompting import PromptDetails, PromptGenerator
 from .scheduler import PipelineScheduler, PipelineStage, StageTask
 
 _SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
@@ -29,12 +30,17 @@ class StoryPipelineController:
         default_voice: str = "default",
         narration_words_per_second: float = 2.5,
         minimum_segment_duration: float = 6.0,
+        prompt_generator: PromptGenerator | None = None,
+        prompt_style: str | None = None,
     ) -> None:
         self.logger = logger or logging.getLogger(self.__class__.__name__)
         self.scheduler = scheduler or PipelineScheduler(self.logger)
         self.default_voice = default_voice
         self.words_per_second = narration_words_per_second
         self.minimum_segment_duration = minimum_segment_duration
+        self.prompt_generator = prompt_generator or PromptGenerator(
+            default_style=prompt_style or "cinematic realism"
+        )
 
     def ingest_story(
         self,
@@ -46,9 +52,20 @@ class StoryPipelineController:
         scenes: List[ScenePlan] = []
         inserted_clips = inserted_clips or {}
 
+        story_elapsed = 0.0
+
         for index, paragraph in enumerate(paragraphs, start=1):
             summary = paragraph.splitlines()[0]
             scene = ScenePlan(name=f"Scene {index}", summary=summary)
+
+            scene.metadata.update(
+                {
+                    "scene_index": str(index),
+                    "paragraph_length": str(len(paragraph.split())),
+                }
+            )
+
+            scene_elapsed = 0.0
 
             for shot_number, sentence in enumerate(self._split_sentences(paragraph), start=1):
                 shot_name = f"Shot {index}.{shot_number}"
@@ -61,12 +78,22 @@ class StoryPipelineController:
                 )
 
                 scene.add_shot(shot)
+                shot.set_timeline(scene_elapsed, scene_elapsed + shot.clip_duration)
+                scene_elapsed = shot.end_time
 
             if not scene.shots:
                 self.logger.warning("Scene '%s' generated without shots", scene.name)
                 scene.total_duration = 0.0
             else:
-                scene.total_duration = sum(shot.clip_duration for shot in scene.shots)
+                scene.total_duration = scene_elapsed
+            scene.metadata.update(
+                {
+                    "total_shots": str(len(scene.shots)),
+                    "duration_seconds": f"{(scene.total_duration or 0.0):.2f}",
+                }
+            )
+            scene.set_timeline(story_elapsed, story_elapsed + (scene.total_duration or 0.0))
+            story_elapsed = scene.end_time
             scenes.append(scene)
 
         return scenes
@@ -82,6 +109,7 @@ class StoryPipelineController:
         inserted_clips: Mapping[str, Sequence[VideoClipReference]] | None = None,
     ) -> Sequence[ScenePlan]:
         """Produce scene plans from text and enqueue all downstream tasks."""
+        self.scheduler.clear()
         scenes = self.ingest_story(story_text, inserted_clips=inserted_clips)
         self.build_schedule(scenes)
         return scenes
@@ -101,7 +129,9 @@ class StoryPipelineController:
             return 0.0
         return max(self.minimum_segment_duration, len(words) / self.words_per_second)
 
-    def _infer_assets_from_sentence(self, sentence: str, shot_name: str) -> Iterable[AssetPlan]:
+    def _infer_assets_from_sentence(
+        self, sentence: str, shot_name: str, prompt_details: PromptDetails
+    ) -> Iterable[AssetPlan]:
         assets: List[AssetPlan] = []
         lower_sentence = sentence.lower()
 
@@ -110,6 +140,7 @@ class StoryPipelineController:
                 identifier=f"{shot_name}-visual",
                 asset_type="image_prompt",
                 description=f"Illustrate: {sentence}",
+                metadata=prompt_details.to_metadata(),
             )
         )
         assets.append(
@@ -151,22 +182,31 @@ class StoryPipelineController:
     ) -> ShotPlan:
         narration_chunks = self._chunk_narration(sentence, shot_name)
         ken_burns_segments = self._plan_ken_burns_segments(shot_name, narration_chunks)
-        inferred_assets = list(self._infer_assets_from_sentence(sentence, shot_name))
-
         clip_duration = sum(segment.duration for segment in ken_burns_segments)
         if supplemental_clips:
             clip_duration += sum(clip.duration for clip in supplemental_clips)
 
         clip_duration = max(clip_duration, self._estimate_duration(sentence))
 
+        prompt_details = self.prompt_generator.build_prompt(sentence)
+        prompt_keywords = prompt_details.keywords
+
         shot = ShotPlan(
             name=shot_name,
             clip_duration=clip_duration,
             visual_prompt=sentence,
             narration_text=sentence,
+            metadata={"keywords": ", ".join(prompt_keywords)},
         )
 
-        for asset in inferred_assets:
+        shot.metadata.update(
+            {
+                "word_count": str(len(sentence.split())),
+                "estimated_duration": f"{clip_duration:.2f}",
+            }
+        )
+
+        for asset in self._infer_assets_from_sentence(sentence, shot_name, prompt_details):
             shot.add_asset(asset)
 
         for chunk in narration_chunks:
