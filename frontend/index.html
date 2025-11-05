@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Short Film Script Generator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Short Film Script Generator</h1>
+      <p>
+        Paste your story concept below to generate a structured plan of scenes and
+        shots for a YouTube-ready short film.
+      </p>
+    </header>
+
+    <main>
+      <section class="editor-panel">
+        <label for="story-input" class="input-label">Story Concept</label>
+        <textarea
+          id="story-input"
+          placeholder="Write a short story or premise..."
+          rows="12"
+        ></textarea>
+
+        <div class="button-row">
+          <button id="generate-btn" class="primary-btn">Generate Plan</button>
+          <button id="render-btn" class="secondary-btn">Render Film</button>
+        </div>
+        <p id="status-message" role="status" aria-live="polite"></p>
+
+        <section class="production-panel">
+          <h2>Production Settings</h2>
+          <label for="voice-input" class="input-label">Narration Voice (optional)</label>
+          <input
+            id="voice-input"
+            type="text"
+            placeholder="e.g. com.apple.speech.synthesis.voice.samantha"
+          />
+
+          <label for="film-name" class="input-label">Film Filename</label>
+          <input
+            id="film-name"
+            type="text"
+            value="ken_burns_feature.mp4"
+          />
+
+          <label for="image-style" class="input-label">Image Style (optional)</label>
+          <input
+            id="image-style"
+            type="text"
+            placeholder="cinematic realism, futuristic neon, warm and nostalgic..."
+          />
+
+          <label for="image-assets-input" class="input-label">Generated Image Paths</label>
+          <textarea
+            id="image-assets-input"
+            rows="6"
+            placeholder="scene1-shot1-visual=/path/to/image.png"
+          ></textarea>
+          <p class="help-text">
+            Provide one mapping per line using <code>asset_id=absolute/path/to/image</code>.
+          </p>
+
+          <label class="checkbox">
+            <input type="checkbox" id="auto-generate-images" />
+            Auto-generate cinematic placeholder images for any missing artwork
+          </label>
+
+          <label for="clip-input" class="input-label">Supplemental Video Clips (optional)</label>
+          <textarea
+            id="clip-input"
+            rows="5"
+            placeholder="Shot 1.1=/path/to/clip.mp4,6,0,Optional description"
+          ></textarea>
+          <p class="help-text">
+            Each line: <code>Shot Name=clip_path,duration_seconds,insertion_offset,description</code>.
+          </p>
+
+          <p id="film-status" class="status-line" role="status" aria-live="polite"></p>
+        </section>
+      </section>
+
+      <section class="results-panel" id="results" hidden>
+        <h2>Scene Plan</h2>
+        <div id="scene-list"></div>
+        <div id="film-output" class="film-output" hidden>
+          <h3>Render Outputs</h3>
+          <p class="film-path"></p>
+          <ul class="shot-output-list"></ul>
+          <div class="generated-images" hidden>
+            <h4>Generated Placeholder Images</h4>
+            <ul></ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <small>
+        Built with FastAPI &amp; vanilla JavaScript. Run the backend and open this page
+        via a static file server to try it out locally.
+      </small>
+    </footer>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

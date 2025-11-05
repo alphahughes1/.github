@@ -1,0 +1,7 @@
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+pydantic==1.10.15
+moviepy==1.0.3
+pydub==0.25.1
+pyttsx3==2.90
+Pillow==10.2.0
